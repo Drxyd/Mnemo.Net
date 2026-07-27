@@ -1,3 +1,3 @@
 <Solution>
-  <Project Path="Mnemo/Mnemo.csproj" />
+  <Project Path="src/Mnemo/Mnemo.csproj" />
 </Solution>
