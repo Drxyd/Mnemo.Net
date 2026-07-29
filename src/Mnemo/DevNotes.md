@@ -70,6 +70,20 @@ OSVirtualMemory  PinnedGCMemory   MemoryMappedFile
  // can allow allocators to free memory back to the OS and allow for memory compaction.
 
 
+    |               | |  region   | |
+|---|---|---|---|---|---|---|---|---|---|
+Region lifecylce (state machine): 
+
+[ Free ] ──(Reserve)──> [ Reserved ] ──(Commit)──> [ Committed ] <──> [ Locked ]
+                             ▲                          │
+                             │                     (Offer / Discard)
+                             │                          ▼
+                      (Recommit / Reclaim) <────> [ OnOffer ]
+                             │
+                             └────────(Decommit)────────┘
+// Free state refers to the region 
+
+
 // Some TODOs:
 // Exceptions as values with analyzer backing to enforce compliance or just throw?
 // Add detailed error i.e. numeric overflow, zero division etc.

@@ -1,4 +1,5 @@
 ﻿using System.Runtime.InteropServices;
+using Mnemo.Primitives;
 
 namespace Mnemo;
 

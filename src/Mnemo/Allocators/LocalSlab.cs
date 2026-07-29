@@ -1,4 +1,6 @@
-﻿namespace Mnemo;
+﻿using Mnemo.Primitives;
+
+namespace Mnemo;
 
 public class LocalSlab<T, M> : IAllocator, IDisposable
     where M : IMemorySource<M>
