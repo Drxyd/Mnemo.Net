@@ -44,10 +44,10 @@ public struct Region(UIntPtr start, nuint size, RegionState state_set, RegionSta
     {
         get
         {
-            return (uint)InternalState
-                 | ((uint)InternalStateSet << 8)
-                 | ((uint)ExternalState << 16)
-                 | ((uint)ExternalStateSet << 24);
+            return ( (uint) InternalState)
+                 | ( (uint) InternalStateSet << 8)
+                 | ( (uint) ExternalState << 16)
+                 | ( (uint) ExternalStateSet << 24);
         }
     }
 
