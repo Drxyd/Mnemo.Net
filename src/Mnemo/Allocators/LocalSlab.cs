@@ -1,4 +1,4 @@
-﻿using Mnemo.Primitives;
+﻿using Mnemo.Topology;
 
 namespace Mnemo;
 

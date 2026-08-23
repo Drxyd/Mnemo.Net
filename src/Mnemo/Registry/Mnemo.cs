@@ -2,64 +2,89 @@
 
 namespace Mnemo;
 
-public static unsafe class Mnemo // Allocator registry and library name
+public static class Mnemo
 {
-    private static readonly List<RegisteredRegion> _regions = new();
+    private static List<MemorySourceRegistration> _sources;
+
     private static readonly object _lock = new();
 
-    internal static void Register<A>(A allocator, IntPtr memory, nuint size)
-        where A : IAllocator
+    static Mnemo()
+    {
+        // Just need a reasonably small default
+        _sources = new List<MemorySourceRegistration>(8);
+    }
+
+    internal static void Register<M>(M memory_source, UIntPtr base_ptr, nuint size)
+        where M : IMemorySource<M>
     {
         lock (_lock)
         {
-            _regions.Add(new RegisteredRegion(memory, size, allocator.Free, typeof(A).TypeHandle)); 
-            
-            // Keep sorted for binary search
-            _regions.Sort((a, b) => a.Start.CompareTo(b.Start));
+            _sources.Add(new MemorySourceRegistration(base_ptr, size, memory_source.FreePointer));
+            _sources.Sort((a, b) => a.Start.CompareTo(b.Start));
         }
     }
 
-    internal static void Unregister(IntPtr start)
+    internal static void Update<M>(M memory_source, UIntPtr base_ptr, nuint size)
     {
         lock (_lock)
         {
-            _regions.RemoveAll(r => r.Start == (nuint) start);
+            int idx = GetSource(base_ptr);
+            MemorySourceRegistration mems_r = _sources[idx];
+            mems_r.Size = size;
+            mems_r.Start = base_ptr;
+            _sources[idx] = mems_r;
+            _sources.Sort((a, b) => a.Start.CompareTo(b.Start));
         }
+        throw new NotImplementedException();
     }
 
-    public static void Free(IntPtr ptr)
+    internal static void Unregister(UIntPtr ptr)
     {
-        if (ptr == IntPtr.Zero) return;
         lock (_lock)
         {
-            GetRegion(ptr).FreeCallback(ptr);
+            int idx = GetSource(ptr);
+            if (idx == -1)
+                throw new InvalidOperationException($"Memory source containting {ptr} not found");
+            _sources.RemoveAt(idx);
+            _sources.Sort((a, b) => a.Start.CompareTo(b.Start));
         }
     }
 
-    internal static RegisteredRegion GetRegion(IntPtr ptr)
+    public static void Free(UIntPtr ptr)
     {
-        // Binary search for the region containing ptr
-        // Would a custom binary search algorithm and a stored tree be more performant?
-        int idx = _regions.BinarySearch(new RegisteredRegion(ptr, 0, null!, default), 
-            Comparer<RegisteredRegion>.Create((a, b) => a.Start.CompareTo(b.Start)));
-
-        if (idx < 0) idx = ~idx - 1; // Isn't this an error state?
-        if (idx >= 0 && idx < _regions.Count && _regions[idx].Contains((nuint)ptr))
+        lock (_lock)
         {
-            return _regions[idx];
+            if (ptr == UIntPtr.Zero) 
+                return;
+            _sources[GetSource(ptr)].FreeCallback(ptr);
         }
-        else throw new IndexOutOfRangeException($"Pointer 0x{ptr:X} does not belong to any registered allocator.");
     }
 
-#if DEBUG
-    public static bool ValidateCast<A>(IntPtr ptr) // use ref instead?
-        where A : IAllocator
+    internal static int GetSource(UIntPtr ptr)
     {
-        return GetRegion(ptr).TypeHandle.Value == typeof(A).TypeHandle.Value;
-    }
-#endif
+        if (_sources == null || _sources.Count == 0)
+            return -1;
 
-    internal static IntPtr RefToNint<T>(ref T reference)
+        int low = 0;
+        int high = _sources.Count - 1;
+
+        while (low <= high)
+        {
+            int mid = low + (high - low) / 2;
+            var source = _sources[mid];
+
+            if (source.Contains(ptr))
+                return mid;
+            if (source.Start < ptr)
+                low = mid + 1;
+            else
+                high = mid - 1;
+        }
+
+        return -1;
+    }
+
+    internal static unsafe IntPtr RefToNint<T>(ref T reference)
     {
         return (IntPtr) Unsafe.AsPointer<T>(ref reference);
     }

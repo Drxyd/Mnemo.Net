@@ -1,6 +1,5 @@
 ﻿using System.Numerics;
 using System.Runtime.CompilerServices;
-
 using Mnemo.Abstractions;
 
 namespace Mnemo.Topology;

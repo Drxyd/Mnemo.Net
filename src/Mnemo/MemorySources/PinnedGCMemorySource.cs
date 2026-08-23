@@ -1,5 +1,5 @@
 ﻿using System.Runtime.InteropServices;
-using Mnemo.Primitives;
+using Mnemo.Topology;
 
 namespace Mnemo;
 
@@ -36,7 +36,7 @@ public sealed class PinnedGCMemorySource :
         throw new NotImplementedException();
     }
 
-    public static bool Free(ref Region region)
+    public static bool ForwardFree(ref Region region)
     {
         throw new NotImplementedException();
     }

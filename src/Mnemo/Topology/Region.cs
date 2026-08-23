@@ -1,6 +1,6 @@
 ﻿using System.Runtime.InteropServices;
 
-namespace Mnemo.Primitives;
+namespace Mnemo.Topology;
 
 
 /*
@@ -19,24 +19,34 @@ namespace Mnemo.Primitives;
 /// </summary>
 /// <param name="start"></param>
 /// <param name="size"></param>
-/// <param name="state_set"></param>
+/// <param name="state_space"></param>
 /// <param name="state"></param>
 [StructLayout(LayoutKind.Sequential, Pack = 1)]
-public struct Region(UIntPtr start, nuint size, RegionState state_set, RegionState state)
+public struct Region(
+    UIntPtr start, nuint size,
+    RegionState state_space,
+    RegionState state,
+    RegionState default_state,
+    nuint v_map_count = 1, 
+    nuint v_map_spacing = 0)
 {
     public UIntPtr Start = start;
     public nuint Size = size;
+    public nuint VMapCount = v_map_count;
+    public nuint VMapSpacing = v_map_spacing ;
 
-    public UIntPtr ExclusiveEnd
+    public UIntPtr ExclusiveEnd // Not good enough, virtual mapping means multiple ends and starts
         => Size > 0 ? Start + Size : Start;
 
     // Internal state represents the managing allocators POV
-    public RegionState InternalState = state; // Singleton subset of InternalStateSet
-    public RegionState InternalStateSet = state_set; // Non-exclusive
+    public RegionState InternalState = state;
+    public RegionState InternalStateSpace = state_space;
     // External state represents the memory sources POV (e.g. GC or OS)
-    public RegionState ExternalState = RegionState.None; // Singleton subset of ExternalStateSet
-    public RegionState ExternalStateSet = RegionState.None;
-    
+    public RegionState ExternalState = RegionState.None;
+    public RegionState ExternalStateSpace = RegionState.None;
+
+    public readonly RegionState DefaultState = default_state;
+
     /// <summary>
     /// Packs the 4 RegionState fields into a single 32-bit integer for fast single-instruction comparison.
     /// </summary>
@@ -45,9 +55,9 @@ public struct Region(UIntPtr start, nuint size, RegionState state_set, RegionSta
         get
         {
             return ( (uint) InternalState)
-                 | ( (uint) InternalStateSet << 8)
+                 | ( (uint) InternalStateSpace << 8)
                  | ( (uint) ExternalState << 16)
-                 | ( (uint) ExternalStateSet << 24);
+                 | ( (uint) ExternalStateSpace << 24);
         }
     }
 
@@ -67,8 +77,8 @@ public struct Region(UIntPtr start, nuint size, RegionState state_set, RegionSta
     /// <returns></returns>
     public bool CheckInternalPossibleStates(RegionState required, RegionState forbidden)
     {
-        bool hasRequired = (InternalStateSet & required) == required;
-        bool hasForbidden = (InternalStateSet & forbidden) == RegionState.None;
+        bool hasRequired = (InternalStateSpace & required) == required;
+        bool hasForbidden = (InternalStateSpace & forbidden) == RegionState.None;
 
         return hasRequired && hasForbidden;
     }
@@ -79,10 +89,10 @@ public struct Region(UIntPtr start, nuint size, RegionState state_set, RegionSta
     /// <param name="source"></param>
     /// <param name="slice_At"></param>
     /// <returns></returns>
-    public static (Region left, Region right) Split( Region source, nuint slice_At )
+    public static (bool success, (Region left, Region right) result) Split(Region source, nuint slice_At )
     {
         if (slice_At > source.Size)
-            return (new Region(), new Region());
+            return (false, (new Region(), new Region()));
 
         Region left = source;
         left.Size = slice_At;
@@ -91,7 +101,7 @@ public struct Region(UIntPtr start, nuint size, RegionState state_set, RegionSta
         right.Start = source.Start + slice_At;
         right.Size = ((nuint)source.Size) - slice_At;
 
-        return (left, right);
+        return (true, (left, right));
     }
 
     /// <summary>
@@ -100,7 +110,7 @@ public struct Region(UIntPtr start, nuint size, RegionState state_set, RegionSta
     /// <param name="left"></param>
     /// <param name="right"></param>
     /// <returns></returns>
-    public static (bool success, Region region) Coalesce( Region left, Region right )
+    public static (bool success, Region result) Coalesce( Region left, Region right )
     {
         ulong left_end = left.Start + left.Size;
 
@@ -110,14 +120,60 @@ public struct Region(UIntPtr start, nuint size, RegionState state_set, RegionSta
         if (!left.HasSameState(right))
             return (false, new Region());
 
+        if (! (left.VMapCount != right.VMapCount &&
+               left.VMapSpacing != right.VMapSpacing))
+            return (false, new Region());
+
         Region coalesced = left;
-        coalesced.Size += right.Size;
+        coalesced.Size += right
+            .Size;
 
         return (true, coalesced);
     }
 
+    /// <summary>
+    /// Used by memory source to remap virtual memory, will be called through RegionSet.Pop().
+    /// </summary>
+    public static (bool success, (Region bottom, Region top) result) Pop(Region target, nuint depth)
+    {
+        if (depth >= target.VMapCount || depth < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(depth), "Depth must be less than the VMapCount of the target region and non-negative.");
+            // return (false, (target, new Region()));
+        }
+
+        nuint p_vmap_count = target.VMapCount - depth;
+        nuint p_start = target.Start + target.VMapSpacing * p_vmap_count;
+        Region top = new Region(
+            p_start,
+            target.Size,
+            target.InternalStateSpace,
+            target.DefaultState,
+            target.DefaultState,
+            target.VMapSpacing,
+            p_vmap_count);
+
+        return (true, (target, top));
+    }
+
+    public bool Contains(nuint address)
+    {
+        bool acc = false;
+        for(nuint i =  0; i < VMapCount; i++)
+        {
+            nuint vmap_start = (nuint)Start + (VMapSpacing * i);
+            nuint vmap_end = vmap_start + Size;
+            if (address >= vmap_start && address < vmap_end)
+            {
+                acc = true;
+                break;
+            }
+        }
+        return acc;
+    }
+
     public Region()
-        : this(UIntPtr.Zero, UIntPtr.Zero, RegionState.None, RegionState.None) { }
+        : this(UIntPtr.Zero, UIntPtr.Zero, RegionState.None, RegionState.None, RegionState.None) { }
 }
 
 /// <summary>

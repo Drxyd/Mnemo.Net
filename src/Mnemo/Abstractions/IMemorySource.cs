@@ -1,5 +1,5 @@
 ﻿using System.Runtime.CompilerServices;
-using Mnemo.Primitives;
+using Mnemo.Topology;
 
 namespace Mnemo;
 
@@ -13,16 +13,23 @@ public interface IMemorySource<T>
 {
     static abstract T Instance { get; }
 
+    static abstract MemorySourceCapabilities Capabilities { get; }
+
     static abstract Region Allocate(nuint size, nuint alignment = 4096);
 
-    static abstract bool Free(ref Region region);
+    // Need more specific names for these free calls as they are very different
+    static abstract bool ForwardFree(ref Region region);
 
     static abstract void Commit(IntPtr addr, nuint size);
 
     static abstract void Decommit(IntPtr addr, nuint size);
 
-    static abstract MemorySourceCapabilities Capabilities { get; }
+    // Need to include registration and deregistration
+
+    IntPtr FreePointer(UIntPtr ptr); // taking a UIntPtr and returning an IntPtr is a bit confusing
 }
+
+// Memory sources are quite diverse so it's hard to think of a good unified interface for them. 
 
 [Flags]
 public enum MemorySourceCapabilities
