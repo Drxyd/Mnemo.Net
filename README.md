@@ -106,5 +106,3 @@ Development is being documented in a series of deep-dive posts covering the arch
 ## License
 
 MIT
-
-## Directory Structure
