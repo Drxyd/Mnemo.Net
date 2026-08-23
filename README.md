@@ -86,28 +86,6 @@ Static analysis to catch dropped handles, double-frees, and `ref T` escapes acro
 - **Replacing the .NET GC.** Mnemo lives alongside the GC, not underneath it. The standalone GC API (`System.GC.Name`) is a full 88-method runtime replacement contract that leaks every internal assumption of the .NET generational collector. It is a fascinating research direction, but it requires a dedicated team and a fork of the runtime. Not on the roadmap until the project is established.
 - **Universal `new` interception.** We do not patch the runtime's allocation path. Source generators and analyzers provide compile-time opt-in. NativeAOT thunks may be explored later for AOT-only deployments.
 
----
-Mnemo/
-├── src/
-│   ├── Mnemo/                    # Core runtime
-│   │   ├── Primitives/           # Region, RegionSet, RegionState
-│   │   ├── Abstractions/         # IAllocator, IMemorySource, IRegionSetIndexer
-│   │   ├── Topology/             # ART, EytzingerArray, RegionSet
-│   │   ├── MemorySources/        # OSVirtualMemorySource, GCAllocator
-│   │   ├── Allocators/           # Slab, Bump, Arena, HAIA
-│   │   ├── Handles/              # NativeBox, NativeArray, StableBox
-│   │   ├── Registry/             # Global pointer-to-allocator dispatch
-│   │   └── Diagnostics/          # Debug wrappers, guard pages, canaries
-│   └── Mnemo.Analyzers/          # Roslyn analyzers
-├── tests/
-│   ├── Mnemo.UnitTests/
-│   ├── Mnemo.IntegrationTests/
-│   └── Mnemo.Benchmarks/
-└── playground/
-└── Mnemo.Playground/         # Ergonomics experiments
----
-
-
 ## Design Philosophy
 
 1. **The GC is not the enemy.** Use it for long-lived metadata, complex graphs, and configuration. Use manual memory for the payload.
