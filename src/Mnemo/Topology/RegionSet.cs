@@ -43,7 +43,7 @@ public struct RegionSet
     }
 
     public nuint MaxSize 
-        => _initialSize * _initialVMapCount;
+        => _initialSize * _initialVMapCount; // What if the allocator can offer memory?
 
     public nuint RegionCount
     {
@@ -84,8 +84,11 @@ public struct RegionSet
         {
             var reg = Regions[i];
             bool contained = reg.Contains(sliceAt);
-            if(contained)
+            if (contained)
+            {
                 result = (reg, i);
+                break;
+            }
         }
         return (true, result);
     }

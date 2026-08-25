@@ -80,8 +80,77 @@ Region lifecylce (state machine):
                              │                          ▼
                       (Recommit / Reclaim) <────> [ OnOffer ]
                              │
-                             └────────(Decommit)────────┘
-// Free state refers to the region 
+                             └────────(Decommit)────────┘ 
+
+// Simplification: Memory source never free virtual address space until the end of execution, 
+// rather they only offer and reclaim previously committed memory
+
+// External := memory source view, Internal := Allocator view
+
+// Internal-External valid state pairs
+
+// { External = Reserved
+//   Internal = Free, Reserved }
+
+// { External = Committed
+//   Internal = Free, Reserved, Committed }
+
+// { External = Locked
+//   Internal = Free, Reserved, Committed, Locked }
+
+// { External = Offered
+//   Internal = Free } 
+
+// Two view state machine:
+// RF -> RR ---> CR -> CC -> CR -> CF -> RF -> FF
+// |             |     |           |
+// |             |     |           |<---> OF
+// |             |     |
+// |             |     |---> CR -> CF
+// v             v
+// CF <-> CR <-> LR <-> LC <-> LL
+
+                                   E_Reserve
+                    ┌──────────────────────────────────► [RF]
+                    │                                     │
+                    │                                  I_Reserve
+                    │                                     │
+                   [FF]                                   ▼
+                    ▲                                    [RR]
+                    │                                     │
+                 Release                               E_Commit
+                    │                                     │
+                   [RF]                                   ▼
+                    │                                    [CR] ◄──────────────┐
+                    │                                     │                  │
+                    │                    ┌────────────────┼───────────┐      │
+                    │                    │                │           │      │
+                    │                 Allocate          E_Lock        Offer   Reclaim
+                    │                    │                │           │      │
+                    │                    ▼                ▼           ▼      │
+                    │                   [CC]             [LR]        [OF] ───┘
+                    │                    │                │
+                    │                  Free            I_Commit
+                    │                    │                │
+                    │                    └────► [CR]      │
+                    │                                     ▼
+                    │               [LF] ◄───────────── [LC] ◄─────────┐
+                    │                │                    │            │
+                    │                │                  I_Lock      I_Unlock
+                    │                │                    │            │
+                    │                │                    ▼            │
+                    │            E_Unlock               [LL] ──────────┘
+                    │                │
+                    │                │
+                    │                │
+                    │                │
+                    │                ▼
+                    └────────────── [CF] ◄──── Decommit
+                                      │
+                                Release reservation
+                                      │
+                                      ▼
+                                    [RF]
 
 
 // Some TODOs:

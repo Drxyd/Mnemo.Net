@@ -23,10 +23,13 @@ namespace Mnemo.Topology;
 /// <param name="state"></param>
 [StructLayout(LayoutKind.Sequential, Pack = 1)]
 public struct Region(
-    UIntPtr start, nuint size,
-    RegionState state_space,
+    UIntPtr start, 
+    nuint size,
+
     RegionState state,
+    RegionState state_space,
     RegionState default_state,
+
     nuint v_map_count = 1, 
     nuint v_map_spacing = 0)
 {
@@ -182,9 +185,10 @@ public struct Region(
 [Flags]
 public enum RegionState : byte
 {
-    None = 0, 
-    Reserve = 1 << 0,
-    Commit = 1 << 1,
-    Offer = 1 << 2, 
-    Lock = 1 << 3
+    None = 0,
+    Free = 1 << 1,
+    Reserved = 1 << 2,
+    Commited = 1 << 3,
+    OnOffer = 1 << 4, 
+    Locked = 1 << 5
 }

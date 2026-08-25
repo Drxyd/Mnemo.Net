@@ -11,7 +11,12 @@ public struct AllocatorRecord // Think of a better name
     public nuint Start => RegionSet[0].Start;
 
     public bool Contains(UIntPtr ptr)
-        => (nuint)ptr >= Start && (nuint)ptr < Start + RegionSet.Size;
+        => (nuint)ptr >= Start && (nuint)ptr < Start + RegionSet.CurrentSize;
+
+    public bool RemoveRegion(nuint region_idx)
+    {
+        throw new NotImplementedException();
+    }
 
     public AllocatorRecord(
         RegionSet region_set,

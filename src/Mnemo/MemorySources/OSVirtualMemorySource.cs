@@ -258,18 +258,21 @@ public sealed class OSVirtualMemorySource : IMemorySource<OSVirtualMemorySource>
     public bool Release(RegionSetHandle handle, UIntPtr rel_start)
     {
         uint setId = (uint)handle.Value;
-        if (!_allocatorRegistrar.TryGetValue(setId, out var set) || !set.Contains(regionIndex))
+        if (!_allocatorRegistrar.TryGetValue(setId, out var set) || !set.Contains(setId))
             return false;
 
         // Full release (MEM_RELEASE requires size = 0 and base address)
         unsafe
         {
-            BOOL ok = PInvoke.VirtualFree(
-                (void*) rel_start,
+            if(OperatingSystem.IsWindowsVersionAtLeast(5, 1, 2600))
+            {
+                BOOL ok = PInvoke.VirtualFree(
+                (void*)rel_start,
                 0,
                 VIRTUAL_FREE_TYPE.MEM_RELEASE);
 
-            if (!ok) return false;
+                if (!ok) return false;
+            }
         }
 
         // Remove from indexer
@@ -284,35 +287,24 @@ public sealed class OSVirtualMemorySource : IMemorySource<OSVirtualMemorySource>
 
     #region Source internal topology operations
 
-    
-
-    struct RMyFun
-    {
-
-    }
-
     public (ushort left, ushort right) Split( // Caller should actually specify the state transition
         RegionSetHandle handle,
         UIntPtr sliceAt)
     {
         nuint setId = handle.Value;
-        if (!_allocatorRegistrar.TryGetValue(setId, out var set))
+        if (!_allocatorRegistrar.TryGetValue(setId, out AllocatorRecord alloc_record))
             throw new InvalidOperationException("Region not owned by this set");
+         
+        (bool succes, (Region source, nuint region_idx)) = alloc_record.RegionSet.GetRegion(sliceAt);
 
-        Region source = set.RegionSet.GetRegion(sliceAt);
+        sliceAt = AlignUp(sliceAt, _pageSize); 
 
-        sliceAt = AlignUp(sliceAt, _pageSize);
-
-        if (sliceAt >= source.Size)
+        if (sliceAt >= source.ExclusiveEnd)
             throw new ArgumentOutOfRangeException(nameof(sliceAt));
 
-        // Remove old region from indexer and set
-        _indexer.Remove(new RegionSetHandle((nuint)source.Start, (nuint)setId));
-        set.Remove(sourceIndex);
-
-        // Create children
-        ushort li = AllocateDescriptor();
-        ushort ri = AllocateDescriptor();
+        // Remove old region from indexer and alloc_record
+        _indexer.Remove(new RegionSetHandle(source.Start, setId));
+        alloc_record.RemoveRegion(region_idx);
 
         _regions[li] = new Region(source.Start, sliceAt, source.InternalStateSpace, source.InternalState)
         {
@@ -326,11 +318,11 @@ public sealed class OSVirtualMemorySource : IMemorySource<OSVirtualMemorySource>
             ExternalStateSpace = source.ExternalStateSpace
         };
 
-        // RegisterAllocator children in indexer and set
+        // RegisterAllocator children in indexer and alloc_record
         _indexer.Insert(new RegionSetHandle((nuint)_regions[li].Start, (nuint)setId));
         _indexer.Insert(new RegionSetHandle((nuint)_regions[ri].Start, (nuint)setId));
-        set.Add(li);
-        set.Add(ri);
+        alloc_record.Add(li);
+        alloc_record.Add(ri);
 
         // Recycle parent descriptor
         FreeDescriptor(sourceIndex);
@@ -359,7 +351,7 @@ public sealed class OSVirtualMemorySource : IMemorySource<OSVirtualMemorySource>
         if (!Region.Coalesce(left, right).success)
             return false;
 
-        // Remove both from indexer and set
+        // Remove both from indexer and alloc_record
         _indexer.Remove(new RegionSetHandle((nuint)left.Start, (nuint)setId));
         _indexer.Remove(new RegionSetHandle((nuint)right.Start, (nuint)setId));
         set.Remove(leftIndex);
@@ -405,7 +397,7 @@ struct SYSTEM_INFO
     public IntPtr dwActiveProcessorMask;
     public uint dwNumberOfProcessors;
     public uint dwProcessorType;
-    public uint dwAllocationGranularity; // <-- This is what you need
+    public uint dwAllocationGranularity; // <-- This is what we need
     public ushort wProcessorLevel;
     public ushort wProcessorRevision;
 }
